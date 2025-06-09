@@ -1,0 +1,445 @@
+---
+title: "An exploratory analysis of the NBA datasets"
+author: "Chloe Powell (C23041975) and Amina Mannan (C23031410) "
+fontsize: 11 pt
+output:
+  pdf_document2: default
+  html_document:
+    toc: true
+    df_print: paged
+  bookdown::pdf_document2:
+    toc: true
+    number_sections: true
+    keep_tex: true
+    citation_package: natbib
+    fig_caption: true
+    highlight: haddock
+    df_print: kable
+    extra_dependencies:
+      caption: labelfont={bf}
+  pdf_document:
+    toc: true
+geometry: margin=0.7in
+fontfamily: times
+abstract: \noindent In this paper, we investigate the 2014 NBA season dataset using statistical techniques including ANOVA, Welch’s t-test, Chi-squared test and logistic regression. We examine variable relationships and assess the impact of home advantage.
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+#library(tidyverse)
+library(kableExtra)
+## Do not include warning messages in the report 
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r, include=FALSE}
+library(corrplot)
+library(Hmisc)
+library(car)
+library(ppcor)
+library(ggpubr)
+library(MASS)
+library(pROC) 
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(broom)
+library(munsell)
+
+NBA <- read.csv('Data/NBA_Shots_Clean_Example.csv', header=TRUE)
+Player_Info <- read.csv('Data/Player_Info.csv', header=TRUE)[,-1]
+```
+
+# Introduction {#sec:intro}
+
+The data used within this report is from `NBA` and `Player_Info`. The `NBA` data set consists of game activity for the $2014$ to $2015$ NBA season and `Player_Info` data set contains personal information of the players during the same NBA season. The National Basketball Association is the top professional basketball league in the world, based in the United States and Canada, the top performing team from $2014$ to $2015$ was Golden State Warriors. One can refer to the NBA Wikipedia page for more information: <https://en.wikipedia.org/wiki/National_Basketball_Association>.
+
+The `NBA` data set consists of $124{,}364$ observations and $21$ variables. The `Player_Info` data set consists of $475$ observations and $13$ variables. The names of the variables are listed below:
+
+```{r, echo = FALSE}
+noquote('NBA Variables names:')
+print(names(NBA))
+
+
+noquote('Player_Info Variables names:')
+print(names(Player_Info))
+```
+
+# Variable Relations {#sec:Vari-Rel}
+
+In this section, we explore notable relationships between key variables from the `NBA` and `Player_Info` data sets. This analysis leverages statistical techniques to highlight meaningful trends and correlations across the data set's. In Section \@ref(sec:height), we analyse effects of player height in decision making by assessing dribbles before a shot taken, using ANOVA and Tukey comparison in Section \@ref(sec:anova). In Section \@ref(sec:drib-success) we consider the $20$ best and worst players according to shot accuracy, using Histograms and Confidence Intervals we identify trends and in Section \@ref(sec:further) we do further analysis of the findings from Section \@ref(sec:drib-success). All analysis conducted in Section \@ref(sec:Vari-Rel) is influenced by the correlations shown in Figure \@ref(fig:pear-corr).
+
+```{r pear-corr, echo=FALSE, fig.align="center", fig.cap="Pearson correlation of variables analyised within this section", fig.height=3.5, fig.width=4.5}
+combined_data <- merge(NBA, Player_Info, by = "PLAYER_NAME")
+options(repr.plot.width=8, repr.plot.height=8)
+
+options(repr.plot.width=8, repr.plot.height=8)
+
+CorrMat <- cor(combined_data[, c('Age', 'DRIBBLES', 'SUCCESS', 'SHOT_DIST', 'PERIOD', 'Height', 'TOUCH_TIME', 'SEC_REMAIN')])
+corrplot(CorrMat, method="circle")
+```
+
+## The Impact of Height {#sec:height}
+
+In Figure \@ref(fig:pear-corr) we are able to see the negative correlation between `DRIBBLES` and`Height`, Pearson Correlation Coefficient $\approx -0.3942$ . From this observation, we will do further analysis to test whether the hypothesis that the height of players affects decision-making against the null hypothesis that it has no effect. Therefore, we conducted ANOVA. We can see below in Section \@ref(sec:anova) that the F-value is very large, $F = 1425$, indicating that the variation of dribbles between height groups is substantially larger than the variability of dribbles within height groups.
+
+### ANOVA {#sec:anova}
+
+```{r}
+combined_data <- merge(NBA, Player_Info, by = "PLAYER_NAME")
+combined_data$Height <- factor(combined_data$Height)
+res.aov1 <- aov(DRIBBLES ~ Height, data=combined_data)
+summary(res.aov1)
+```
+
+From these findings we next do a Tukey multiple comparisons test to identify which height groups have statistically significant differences.
+
+```         
+TukeyHSD(res.aov1)
+```
+
+```{r, include=FALSE}
+tukeytable <- data.frame(
+    Height = c('212.5-195', '182.5-177.5', '205-180', '190-185', '215-212.5', '210-172.5'), 
+    diff = c(-1.8550620650, 0.5564984108, -4.6903391572, 0.1362598499, 0.3803867403, -3.9103099430),
+    lwr = c(-2.5313418, -0.4548465, -5.3964368, -0.4976657, -0.7923146, -5.0377280), 
+    upr = c(-1.178782286, 1.567843337, -3.984241519, 0.770185443, 1.553088111, -2.782891913),
+    p_adg = c(0.0000000, 0.8944546, 0.0000000, 0.9999983,  0.9995471, 0.0000000),
+    stringsAsFactors = FALSE)
+```
+
+```{r tukey, echo=FALSE}
+knitr::kable(tukeytable, 
+             caption = 'Summary of the Tukey comparrison of mean dribbles within height groups.\\label{tab:tukey-table}',
+  align = 'ccccc',
+  booktabs = TRUE)%>%kable_styling(latex_options = 'HOLD_position')
+```
+
+In Table \@ref(tab:tukey) we have compiled an overview of the results obtained from the Tukey test. It is made evident in the Table \@ref(tab:tukey) that there is a significant difference in the lower end of height with the upper end of player height as the $p-values <0.05$ suggest a statistically significant difference as we expected. Therefore there is strong evidence to reject the null hypothesis from Section \@ref(sec:height).
+
+## The Influence of Dribble Counts on Shot Success Rates {#sec:drib-success}
+
+Another interesting negative correlation we can observe in Figure \@ref(fig:pear-corr), is between `DRIBBLES` and `SUCCESS`, Pearson correlation coefficient $\approx -0.03532$. We can preform various tests to see whether this is statistically significant and if there is a trend of dribbles among the NBA's best preforming players. To view the full list of which players are within top $20$ and bottom $20$ players in accordance to their shot accuracy we can see Table \@ref(tab:shot-acc) in the Appendix, Section \@ref(sec:appendix).
+
+We create two histograms to visualize the distribution of the data seen in Figure \@ref(tab:shot-acc). The histograms are presented in Figure \@ref(fig:hist-top-bottom) along with the $99\%$ confidence intervals. It is evident in the left histogram in Figure \@ref(fig:hist-top-bottom) that the top $20$ players from the season tend to do more dribbles before a shot than those in the bottom $20$ players. To test this hypothesis we need to conduct further statistical tests, we can see this in section \@ref(sec:further).
+
+```{r player-accuracy, include=FALSE}
+
+players_attempts_with_accuracy <- NBA %>%
+  group_by(PLAYER_NAME) %>%
+  summarise(total_attempted_shots = n(),
+    total_made_shots = sum(SUCCESS, na.rm = TRUE),
+    shooting_accuracy = total_made_shots / total_attempted_shots * 100,
+  ave_dribbles = sum(DRIBBLES) / total_attempted_shots,
+  ave_defender_dist = sum(CLOSE_DEF_DIST) / total_attempted_shots)
+
+top_player_accuracy <- players_attempts_with_accuracy %>%
+  arrange(desc(total_attempted_shots)) %>%
+  head(20)
+
+bottom_player_accuracy <- players_attempts_with_accuracy %>%
+  arrange(total_attempted_shots) %>%
+  head(20)
+top_player_accuracy$Group <- "Top"
+bottom_player_accuracy$Group <- "Bottom"
+
+combined_top_bottom_players <- bind_rows(top_player_accuracy, bottom_player_accuracy)
+
+print(combined_top_bottom_players)
+
+CI_MeanDribbles1 <- t.test(top_player_accuracy$ave_dribbles, conf.level=0.99)$conf.int
+print(CI_MeanDribbles1)
+
+CI_MeanDribbles2 <- t.test(bottom_player_accuracy$ave_dribbles, conf.level=0.99)$conf.int
+print(CI_MeanDribbles2)
+```
+
+```{r hist-top-bottom, echo=FALSE, fig.align="centre", fig.cap="Histogram of the mean dribbles before a shot of the top and bottom 20 players according to shot accuracy for the season and 99% confidence intervals.", fig.height=2, fig.width=6}
+par(mar=c(3, 3, 0.5, 0.5), mgp = c(1.5, 0.5, 0))
+par(mfrow=c(1,2))
+
+
+all_dribbles <- c(top_player_accuracy$ave_dribbles, bottom_player_accuracy$ave_dribbles)
+dribble_breaks <- pretty(range(all_dribbles), n = 10)
+
+# Histogram for Top 20
+hist(top_player_accuracy$ave_dribbles,
+     breaks = dribble_breaks,
+     freq = FALSE,
+     col = 'darkslateblue',
+     xlab = 'Average Dribbles',
+     main = 'Top 20 Players',
+     cex.main=0.5)
+abline(v = CI_MeanDribbles1, lty = 3, lwd = 3, col = 'springgreen2')
+legend("topright", legend = "99% CI", col = 'springgreen2', lwd = 3, cex = 0.7, bg = 'white')
+
+# Histogram for Bottom 20
+hist(bottom_player_accuracy$ave_dribbles,
+     breaks = dribble_breaks,
+     freq = FALSE,
+     col = 'firebrick2',
+     xlab = 'Average Dribbles',
+     main = 'Bottom 20 Players',
+     cex.main=0.5)
+abline(v = CI_MeanDribbles2, lty = 3, lwd = 3, col = 'springgreen2')
+legend("topright", legend = "99% CI", col = 'springgreen2', lwd = 3, cex = 0.7, bg = 'white')
+
+```
+
+### Further tests {#sec:further}
+
+Here we have conducted a variance test and a t test to check our hypothesis that players with a higher shot accuracy take longer before shots against the null hypothesis that there is no difference between groups.
+
+-   Firstly an F-test to compare variances is conducted with significance level $\alpha = 0.05$. This test results in $F-value \approx 4.12$, and $p-value = 0.0034$.
+
+-   Secondly a Welch two sample t-test for `top_player_accuracy` and `bottom_player_accuracy` with significance level $\alpha = 0.05$. We see that we're $95\%$ confident that the difference in average dribbles is between $[1.46, 3.42]$ and we have a $p-value \approx 0.000021$.
+
+```{r, echo=FALSE, fig.align='left', fig.height=2.5, fig.width=3}
+var.test(top_player_accuracy$ave_dribbles, bottom_player_accuracy$ave_dribbles, alternative = "two.sided", conf.level=0.95)
+```
+
+```{r, echo=FALSE, fig.align='left', fig.height=2.5}
+t.test(top_player_accuracy$ave_dribbles, bottom_player_accuracy$ave_dribbles, alternative = "two.sided", conf.level=0.95, var.equal=FALSE)
+```
+
+Since we obtain a $p-value < 0.05$ in the F-test we have strong evidence to suggest that there is a statistically significant difference in variance of the top and bottom $20$ NBA players in the $2014$ season. Furthermore in the Welch t-test we have a $p-value < 0.01$, therefore we have strong evidence to suggest mean dribbles before a shot differs between groups. Hence we can conclude that taking slightly longer before a shot is beneficial to a players shot accuracy as seen in Figure \@ref(fig:hist-top-bottom).
+
+
+# Home advantage {#sec:hom-adv}
+
+In Section \@ref(sec:hom-adv), we will explore the effect that the location of a game has on its result. Our initial hypothesis is that a home game is more likely to lead to a winning result, and we will look at several aspects of a basketball match to prove or disprove this. Section \@ref(sec:hom-var), investigates this by cross-referencing the `LOCATION` data with other variables provided in the data set. These include `WIN_LOSE`, `SUCCESS`, `PTS_TYPE` and others. We will perform a range of statistical tests for numerical analysis and create graphs for visual observation. The second section, \@ref(sec:log-reg), summarize the results from Section \@ref(sec:hom-var) using logistic regression to create a box plot to visualise how significant some of the variables that we previously look at in Section \@ref(sec:hom-var) are, on the result of a game. Section \@ref(sec:hom-adv) uses data from 'NBA'. As stated in Section \@ref(sec:intro), this contains data on game activity from the $2014$ to $2015$ NBA season. 
+
+## Exploring Home "Advantage" on several variables {#sec:hom-var}
+### Win Rate {#sec:hom-winning}
+
+```{r, include=FALSE}
+# Player-level accuracy comparison
+player_accuracy <- NBA %>%
+  group_by(PLAYER_ID, PLAYER_NAME, LOCATION) %>%
+  summarize(
+    shots = n(),
+    made = sum(SUCCESS),
+    accuracy = made / shots,
+    .groups = "drop"
+  ) %>%
+  filter(shots >= 30) # Filter players with minimum shots for reliability
+
+# Print a sample of player accuracy by location
+print("Sample of player shooting accuracy by location:")
+head(player_accuracy, 10)
+
+# Compare the same players home vs away
+player_home_away <- player_accuracy %>%
+  select(PLAYER_ID, PLAYER_NAME, LOCATION, accuracy) %>%
+  tidyr::pivot_wider(names_from = LOCATION, values_from = accuracy) %>%
+  mutate(diff = H - A) %>%
+  arrange(desc(diff))
+
+# Print players with biggest home advantage
+print("Players with the biggest home court shooting advantage:")
+head(player_home_away, 10)
+
+# Print players with biggest away advantage
+print("Players who shoot better on away courts:")
+tail(player_home_away, 10)
+```
+
+```{r, echo = FALSE}
+# Calculate win percentage at home for each team
+home_advantage <- NBA %>%
+  filter(LOCATION == "H") %>%
+  group_by(HOME_TEAM) %>%
+  summarize(
+    games = n_distinct(GAME_ID),
+    wins = sum(WIN_LOSE == "W", na.rm = TRUE)/n_distinct(GAME_ID),
+    win_pct = wins
+  ) %>%
+  arrange(desc(win_pct))
+
+# Print overall home win percentage
+overall_home_win <- mean(NBA$WIN_LOSE[NBA$LOCATION == "H"] == "W", na.rm = TRUE)
+print(paste("Overall home win percentage:", overall_home_win*100))
+```
+
+This result is the home win percentage for all 30 teams in the data set. Over half of the games played at home were won so this may indicate some correlation however, we cannot be completely sure and will run further tests to examine this result.
+
+```{r homewin, echo=FALSE, fig.cap="A bar chart showing the percentage of games that were won at home in the 2014/2015 season by team.", fig.align="center", fig.height=3, fig.width=3.5}
+
+ggplot(home_advantage, aes(x = reorder(HOME_TEAM, win_pct), y = win_pct)) +
+  geom_bar(stat = "identity",fill='orchid1') +
+  geom_hline(yintercept = 0.5, linetype = "solid", color = "green") +
+  coord_flip() +
+  labs(x = "Team", y = "Win Percentage") +
+  theme_minimal() 
+```
+
+
+Figure \@ref(fig:homewin) shows us that the Golden State Warriors have the highest home advantage, with a win percentage of close to $70\%$. However, the Minnesota Timberwolves are performed the worst when playing at home, with a win percentage of around $12\%$. Upon observation, we see no correlation between playing at home and winning. We will now perform a chi-square test to obtain a p-value to confirm this.
+
+
+```{r echo=FALSE}
+# Chi-square test for win/loss vs. home/away
+win_loss_table <- table(NBA$LOCATION, NBA$WIN_LOSE)
+chisq.test(win_loss_table)
+```
+
+Since we are comparing categorical variables, we use a Chi-Squared test to measure significance. A large X value of $X= 1828.6$ suggests a greater difference between observed and expected values. A p-value this small (essentially 0) suggests that the result is highly statistically significant, and may contradict the initial observation we make in Figure \@ref(fig:homewin).
+
+Therefore, we reject the null hypothesis. There is strong evidence of an association between playing at home and winning.
+
+### Shot Accuracy {#sec:hom-acc}
+
+This section looks at whether shot accuracy is affected by playing at home. We will use the `LOCATION` and `SUCCESS` variables for the overall effect, then use the variables `PLAYER_ID` and `PLAYER_NAME` to see how playing at home affects individual player's shot accuracy.
+
+```{r, include=FALSE}
+# Compare shooting accuracy at home vs. away
+shooting_accuracy <- NBA %>%
+  group_by(LOCATION) %>%
+  summarize(
+    shots = n(),
+    made = sum(SUCCESS),
+    accuracy = made / shots
+  )
+
+print(shooting_accuracy)
+```
+
+Values found from a shot accuracy analysis show that, in total, $186$ fewer shots were attempted at home games. The accuracies of these shots look very similar at $0.45$ for Away and $0.458$ for Home. 'Accuracies' refers to shots that resulted in points being scored, or a `SUCCESS`. We will verify the statistical significance by doing a T-test, since we are comparing two means.
+
+```{r, echo=FALSE}
+t.test(SUCCESS ~ LOCATION, data = NBA)
+```
+
+We assume the null hypothesis, that the mean of A (Away) = mean of H (Home), is true. Although the means are very close in value, the t-test reveals a p-value of $0.005897 < 0.05$ so we reject the null hypothesis as there is evidence to show a significant difference in the average success rates between Group A and Group H. While the difference is $<1\%$, the very large sample size makes this surprising result reliable.
+
+A paired t-test, with the null hypothesis that the mean difference between home (H) and away (A) values is equal to zero, gave the mean difference to actually be $0.006664$. This positive value means that players performed slightly better at home rather than away, on average. The confidence interval $(0.00015, 0.01318)$ does not include zero, which supports the significance of the result.
+
+```{r, include=FALSE}
+acctable <- data.frame(
+    Name = c('Ed Davis', 'Nerlens Noel', 'Udonis Haslem', 'Bojan Bogdanovic', 'Mike Miller', 'Brian Roberts','Rasual Butler','Boris Diaw','Leandro Barbosa','KJ McDaniels'), 
+    Away = c(0.5176471,0.3696498,0.3600000,0.3312102,0.2380952,0.3426966,0.3796791,0.4040816,0.4256757,0.3443396),
+    Home = c(0.7328244,0.5524862,0.5254237,0.4842105,0.3725490,0.4583333,0.4951456,0.5172414,0.5384615,0.4554455), 
+    Diff = c(0.2151774,0.1828364,0.1654237,0.1530003,0.1344538,0.1156367,0.1154665,0.1131597,0.1127859,0.1111059 ),
+    Team = c('LAL','PHI','MIA','BKN','CLE','CHA','WAS','SAS','GSW','PHI'),
+    stringsAsFactors = FALSE)
+```
+
+```{r acc, echo=FALSE}
+knitr::kable(acctable, 
+             caption = 'Summary of the top ten players with the largest home court shooting advantage\\label{tab:acc-table}',
+  align = 'cccc',
+  booktabs = TRUE)%>%kable_styling(latex_options = 'HOLD_position')
+```
+
+An interesting observation to be made from Table \@ref(tab:acc) is that of the top ten players with the biggest home court shooting advantage, only one was in the Golden State Warriors team, which we saw had the highest win rate at home in the $2014$ to $2015$ season in Figure \@ref(fig:homewin). This leads us to conclude that player shot accuracy is not the most significant factor in the win or loss of a match. In fact, Nerlens Noel played for the Philadelphia 76ers, which was one of the three worst performing teams in Figure \@ref(fig:homewin).
+
+```{r homaway, echo=FALSE, fig.cap="Histogram showing the distribution of differences in shooting accuracy between home and away games. A red dashed line indicates no difference, and the dotted curve shows a fitted normal distribution.", fig.align="center", fig.height=3.5, fig.width=3.5}
+ggplot(player_home_away, aes(x = diff)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "aquamarine", color = "black") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  stat_function(fun = dnorm,
+                args = list(mean = mean(player_home_away$diff, na.rm = TRUE),
+                            sd = sd(player_home_away$diff, na.rm = TRUE)),
+                linetype = "dotted", color = "blue", linewidth = 1) +
+  labs(title = "Distribution of Home vs Away Shooting Accuracy Differences",
+       x = "Home Accuracy - Away Accuracy", 
+       y = "Density") +
+  theme_minimal()
+
+
+```
+
+Figure \@ref(fig:homaway) aligns well with the curve, suggesting the differences follow an approximately normal distribution. The vertical line represents no difference (i.e., home and away shooting accuracy are equal). The fact that the distribution is slightly skewed right of this line supports the idea of a home advantage, but a small one. Most values are within $±0.1$, but a few players show more extreme differences (both better and worse at home), indicating variability in individual performance, which is expected.
+
+### Shot Type {#sec:hom-typ}
+
+We will use the `PTS_TYPE` variable to analyse the shots taken inside or outside the arc, earning 2 or 3 points respectively.
+
+
+```{r, include=FALSE}
+
+shot_type_analysis <- NBA %>%
+  group_by(LOCATION, PTS_TYPE) %>%
+  summarize(
+    shots = n(),
+    made = sum(SUCCESS),
+    accuracy = made / shots,.groups="keep"
+  )
+
+print(shot_type_analysis)
+```
+
+```{r, echo=FALSE}
+t.test(PTS_TYPE ~ LOCATION, data = NBA)
+```
+
+
+A shot-type analysis, calculated by dividing the successful shots by the overall number of shots, shows that the accuracy of 2-point shots at home is $0.494$ compared to $0.487$ away. The 3-point shots at home had an accuracy of $0.358$ and $0.345$ away. Both values are higher at the home location but the difference is small. This shows a similar outcome to Section \@ref(sec:hom-acc). But the t-test showed a p-value of $0.02884<0.05$ along with a $95\%$confidence interval of $(-0.0103270203,-0.0005624076)$, both of which are statistically significant and allow us to reject the null hypothesis that the true difference in means between group A and group H is not equal to 0.
+
+## Logistic Regression {#sec:log-reg}
+
+```{r, include=FALSE}
+model <- glm(SUCCESS ~ LOCATION + SHOT_DIST + CLOSE_DEF_DIST + PTS_TYPE, 
+             data = NBA, family = binomial)
+summary(model)
+
+```
+
+```{r logreg, echo=FALSE, fig.cap="Estimated logistic regression coefficients (log-odds) with 95% confidence intervals for predicting shot success based on shot distance, defender proximity, shot type, and location. Positive coefficients indicate variables associated with a higher likelihood of a successful shot, while negative coefficients indicate a lower likelihood.", fig.align="center", fig.height=3.5, fig.width=5}
+
+tidy_model <- tidy(model, conf.int = TRUE)
+ggplot(tidy_model, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  labs(title = "Logistic Regression Coefficients",
+       x = "Estimate (log-odds)",
+       y = "Predictor") +
+  theme_minimal()+
+   theme(plot.title = element_text(size = 5))
+```
+
+The logistic regression and box plot in Figure \@ref(fig:logreg) allow us to make the following conclusions:
+
+`LOCATIONH` $(0.029661)$:
+
+This is positive and statistically significant $p = 0.011255<0.05$. Playing at home increases the log odds of making a shot by 0.03 compared to away games. Converting to odds ratio: $exp(0.029661) \approx 1.03$, meaning players have about 3% higher odds of making shots when playing at home This supports the home advantage hypothesis, though the effect is relatively small.
+
+`SHOT_DIST` $(-0.070680)$:
+
+This shows a significant negative effect $p < 2e-16\simeq0$. Each additional unit of distance decreases the log odds of success by about 0.07. For each unit increase in shot distance, the odds of making the shot decrease by about $6.8\% (1 - exp(-0.070680))$. This confirms the idea that longer shots are harder to make.
+
+`CLOSE_DEF_DIST` $(0.115996)$:
+
+We see this has a highly significant positive effect as $p < 2e-16\simeq0$. As defender distance increases, shot success probability increases. For each unit increase in defender distance, the odds of making the shot increase by 12.3%. This shows that tighter defense significantly reduces shooting success.This makes intuitive sense as more open shots are more likely to go in.
+
+`PTS_TYPE` $(0.176674)$:
+
+A positive effect $p < 2e-16\simeq0$. 3-point shots have higher log odds of success than 2-point shots by about $0.18$, and $exp(0.176674) \approx 1.19$, meaning 3-point shots have about $19\%$ higher odds of success than 2-point shots when considering other factors. This might seem counter intuitive but makes sense when considering that `SHOT_DIST` is already in the model - this suggests that 3-point shooters may be more selective or skilled.
+
+All variables show significance as their confidence intervals, indicated by the horizontal lines, do not cross $0$. Additionally, their p-values are extremely small: approaching $0$ and definitely below the $5\%$ significance level.
+
+# Conclusion {#sec:con}
+Throughout this paper we have presented results of statistical tests from data on the $2014-2015$ NBA season.
+
+- Section \@ref(sec:Vari-Rel) 
+This section explores variable relationships, Section \@ref(sec:height) looks at `Height` and `DRIBBLES` and Section \@ref(sec:drib-success) looks at `DRIBBLES` and `shooting_accuracy`. With the use of ANOVA and Tukey in Section \@ref(sec:anova), we gained strong statistical evidence to show height has an impact of the number of dribbles a player takes before a shot, this could be attributed to position of player or playing style. For the analysis of `DRIBBLES` and `shooting_accuracy` multiple different tests were applied to the data obtained in Table \@ref(tab:shot-acc) from this we are able to conclude that there is a relationship between the players with the best shot accuracy and tose who take longer dribbling before a shot.
+
+- Section \@ref(sec:hom-var)
+Some may assume that a home game gives teams an advantage. This could be a result of knowing the court better, crowd support, or not needing to travel and therefore feeling more rested. Our hypothesis in Section \@ref(sec:hom-adv) was tested in several ways and following this, we may conclude that a home court is not the primary factor in a win or a loss. The home advantage effect, while statistically significant in Section \@ref(sec:hom-winning), is smaller than the effects of shot distance and the proximity of defenders. Teams should prioritise defensive pressure (reducing `CLOSE_DEF_DIST`), as seen in Section \@ref(sec:log-reg), as it has a stronger effect than home advantage.
+
+
+
+# Appendix {#sec:appendix}
+
+In Table \@ref(tab:shot-acc) we compile the top and bottom $20$ players in accordance to shot accuracy along with other contributing factors.
+
+```{r shot-acc, echo=FALSE}
+knitr::kable(combined_top_bottom_players, 
+             caption = 'Top and Bottom players in order of shooting accuracy.\\label{tab:shot-acc}',
+  align = 'ccccc',
+  booktabs = TRUE)%>%kable_styling(latex_options = c('HOLD_position', 'scale_down'))
+```
